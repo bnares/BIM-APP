@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "ZAcmykFeOTNarYqWFTVQnWUgSJp5vDX1uE0KSoz5KyA=",
+  "Source": "BimViewer",
+  "BasePath": "_content/BimViewer",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
