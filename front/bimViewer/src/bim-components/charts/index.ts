@@ -1,6 +1,8 @@
 import * as OBC from "openbim-components";
+import * as WEBIFC from "web-ifc";
 import PieChartWithLabel, { IPieData } from "../../react-component/charts/PieChartWithLabel";
 import { ToDoData } from "../todo";
+import { IfcProperties } from "bim-fragment";
 
 type QtoStatus = {[label: string] : number}
 
@@ -21,6 +23,19 @@ export class ChartsCreator extends OBC.Component<IPieData[]> implements OBC.UI{
         components.tools.add(ChartsCreator.uuid, this);
         this.preparePieDataToDisplay(toDoData);
         //this.uiElement.get("chartsWindow").get().append()
+    }
+
+    countNumberOfElementsTypeInModel(properites: IfcProperties){
+        //var test = OBC.IfcPropertiesUtils.groupEntitiesByType(properites,expressIds);
+        var beamsNUmber = OBC.IfcPropertiesUtils.getAllItemsOfType(properites, WEBIFC.IFCBEAM);
+        console.log("beams:", beamsNUmber);
+        var slabNumber = OBC.IfcPropertiesUtils.getAllItemsOfType(properites, WEBIFC.IFCSLAB);
+        console.log("slab:", slabNumber);
+        var wallNumber = OBC.IfcPropertiesUtils.getAllItemsOfType(properites, WEBIFC.IFCWALL);
+        console.log("wall:", wallNumber);
+        var columns = OBC.IfcPropertiesUtils.getAllItemsOfType(properites, WEBIFC.IFCCOLUMN);
+        console.log("columns: ", columns);
+        return {Beams:beamsNUmber.length, Slabs: slabNumber.length, Walls:wallNumber.length, Columns:columns.length};
     }
 
     private preparePieDataToDisplay(toDoData:ToDoData[]){

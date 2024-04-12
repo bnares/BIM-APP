@@ -22,13 +22,9 @@ export function IFCViewer(){
     const navigate = useNavigate();
     let {fileName} = useParams();
     if(fileName === undefined) return navigate("/");
-    //const [ifcLoad, setIfcLoad] = React.useState<null | OBC.FragmentIfcLoader>(null)
-    //const [fragMana, setFragMana] = React.useState<null | OBC.FragmentManager>(null);
-    //const {model, setModel} = React.useContext(ViewerContext);
-    //const [listToDoData, setListToDoData] = React.useState<ToDoData[]>([]);
     const [openModalCharts, setOpenModalCharts] = React.useState<boolean>(false);
     const [chartData, setChartData] = React.useState<IChartData>({labels:[], data:[]});
-    //const [loadedModelToDos, setLoadedModelToDos] = React.useState([]);
+    const [barChartData, setBarChartData] = React.useState({});
     var modelElementSelected : any[] = [];
     console.log("useParams fileName: ", fileName);
     let viewer : OBC.Components;
@@ -58,21 +54,18 @@ export function IFCViewer(){
         cameraComponent.updateAspect()
         rendererComponent.postproduction.enabled = true;
 
-        
         const spinner = new OBC.Spinner(viewer)
         
         viewer.ui.add(spinner);
         spinner.active = true;
         spinner.visible = true;
         const fragmentManager = new OBC.FragmentManager(viewer);
-        //setFragMana(fragmentManager);
 
         const ifcLoader = new OBC.FragmentIfcLoader(viewer);
         ifcLoader.settings.wasm = {
             path: "https://unpkg.com/web-ifc@0.0.44/",
             absolute: true
         }
-        //setIfcLoad(ifcLoader);
 
         const highlighter = new OBC.FragmentHighlighter(viewer);
         highlighter.setup();
@@ -87,10 +80,7 @@ export function IFCViewer(){
             const arrayBuffer = await file.arrayBuffer();
             const setoUint = new Uint8Array(arrayBuffer);
             const model = await ifcLoader.load(setoUint,fileName);
-            //setLoadedModel(model);
             viewer.scene.get().add(model);
-            
-
         }
 
         const loadFragFile = async (fileName : string)=>{
@@ -106,7 +96,6 @@ export function IFCViewer(){
             await fetch(`./${fileName}.txt`)
                 .then(response=> response.text())
                 .then(textRes=> {model.properties = JSON.parse(textRes)});
-
         }
 
         fragmentManager.onFragmentsLoaded.add(async (model : FragmentsGroup)=>{
@@ -123,17 +112,13 @@ export function IFCViewer(){
         todo.setup();
 
         const getStorageToDoInDatabase = async ()=>{
-            //console.log("loaded model: ", loadedModelToDos);
             var data = await getAllToDo();
-            console.log("getAllToDo function: ", data);
             for(var i =0; i<data.length; i++){
                 var toDo = data[i];
-                console.log("single toDo: ", toDo);
                 var createdToDoDataFromDb = Helper.CreateToDoDataObjectFromDbInfo(toDo);
                 toDoData.push(createdToDoDataFromDb);
             }
             
-           console.log("allList of pushed toDo: ", toDoData);
             for(var storageToDo of data){
                 
                 var card = new ToDoCard(viewer, storageToDo.id);
@@ -159,20 +144,11 @@ export function IFCViewer(){
                     if(!(cameraComponent instanceof OBC.OrthoPerspectiveCamera)) return;
                     if(fragmentMapWithSet.length==0) return;
                     cameraComponent.controls.setLookAt(lookData.position.x,lookData.position.y, lookData.position.z, lookData.target.x, lookData.target.y, lookData.target.z,true);
-                    console.log("fragmentMap to select: ", fragmentMapWithSet);
                     var toDoSelected = toDoData.filter(x=>JSON.stringify(x.camera)==JSON.stringify(lookData));
-                    //highlighter.highlightByID("select",fragmentMapWithSet);
                     highlighter.highlightByID("select",toDoSelected[0].fragmentMap);
                 })
 
                 card.onDeleteBtnClick.add(async (idNumberOfToDo)=>{
-                    var allToDoInCard = todo.uiElement.get("floatingWindow").children;
-                    for(var toDoCardUIComponent of allToDoInCard){
-                        var toDoComponentData = toDoCardUIComponent.get();
-                        
-                    }
-                    
-                    var idOfToDoToDelete = (card.getIdNumberOfToDo()) as number;
                     var cardToDelete = toDoCardComponentList.find(x=>x.getIdNumberOfToDo()==idNumberOfToDo);
                     if(idNumberOfToDo ==0 || !cardToDelete) return;
                     await agent.toDo.deleteToDo( idNumberOfToDo).catch(e=>console.warn(e));
@@ -184,9 +160,10 @@ export function IFCViewer(){
                 todo.uiElement.get("floatingWindow").addChild(card);
             }
         }
-
        
         const onModelLoaded = async (model : FragmentsGroup)=>{
+            var chartBarData = charts.countNumberOfElementsTypeInModel(model.properties);
+            setBarChartData(chartBarData);
             highlighter.update();
             propertiesProcessor.process(model);
 
@@ -278,36 +255,27 @@ export function IFCViewer(){
                     if(Object.keys(dataToAdd.fragmentMap).length==0) return;
                     camera1.controls.setLookAt(dataToAdd.camera.position.x, dataToAdd.camera.position.y, dataToAdd.camera.position.z, dataToAdd.camera.target.x, dataToAdd.camera.target.y, dataToAdd.camera.target.z, true);
                     highlighter.highlightByID("select", dataToAdd.fragmentMap);
-                    //console.log("coresponded Data: ", dataToAdd);
                     
                 })
     
-                
-        
                 card.onDeleteBtnClick.add(toDoCard=>{
                     todo.uiElement.get("floatingWindow").removeChild(card);
                     toDoCardComponentList = toDoCardComponentList.filter(x=>x.getIdNumberOfToDo()!=card.getIdNumberOfToDo());
                     card.dispose();
                     
                 })
-    
                 todo.uiElement.get("floatingWindow").addChild(card);
-               
             })
-
             spinner.visible = false;
             spinner.active = false;
         }
 
-
         ifcLoader.onIfcLoaded.add(async (model)=>{
            onModelLoaded(model);
+
         })
 
-       
-
         todo.onColorizeBtnClick.add(async ({active})=>{
-            
             if(active){
                 var createdFragmentMap:{[k:string]: Set<string>} = {};
                 var usedStatus : string[]= [];
@@ -338,7 +306,6 @@ export function IFCViewer(){
                     await highlighter.highlightByID(`${ToDoCreator.uuid}-${statusName}`,createdFragmentMap);
                     
                 }
-                
                
             }else{
                 highlighter.clear(`${ToDoCreator.uuid}-Active`);
@@ -367,6 +334,8 @@ export function IFCViewer(){
                 dataToSend.labels.push(statusCreated);
                 dataToSend.data.push(dictData[statusCreated]);
             }
+
+            
             return dataToSend;
         }
 
@@ -403,8 +372,6 @@ export function IFCViewer(){
         if(fileName) {
            var dataToDos = await agent.toDo.allToDos(fileName);
            return dataToDos;
-           //console.log("dataToDos: ", dataToDos);
-           //setLoadedModelToDos(dataToDos);
         }
         else console.warn("wrong file name in url");
     }
@@ -415,13 +382,6 @@ export function IFCViewer(){
         //loadFile(fileName+".ifc");
         return () => {
           viewer.dispose();
-          //if(ifcLoad) ifcLoad.dispose();
-          //setIfcLoad(null);
-          //loadedModel?.dispose();
-          //setLoadedModel(null);
-          //fragMana?.dispose();
-          //setFragMana(null);
-          //setListToDoData([]);
           
         }
       }, [])
@@ -433,7 +393,14 @@ export function IFCViewer(){
             style={{ minWidth: 0, position: "relative" }}
         >
             <div>Test</div>
-            {openModalCharts ? <ModalChartsWindow open={openModalCharts} setOpen={setOpenModalCharts} chartData = {chartData} /> : null}
+            {openModalCharts ? 
+                <ModalChartsWindow 
+                    open={openModalCharts} 
+                    setOpen={setOpenModalCharts} 
+                    chartData = {chartData}
+                    barData={barChartData} 
+                /> 
+                    : null}
         </div>
     )
 

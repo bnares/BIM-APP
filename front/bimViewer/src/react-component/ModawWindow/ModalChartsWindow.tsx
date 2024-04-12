@@ -32,6 +32,7 @@ export interface IModalDataSend{
   open: boolean,
   setOpen: (value:boolean)=>{},
   chartData : IChartData,
+  barData: {},
 }
 
 export function ModalChartsWindow(props: IModalDataSend) {
@@ -52,12 +53,44 @@ export function ModalChartsWindow(props: IModalDataSend) {
       >
         <Box sx={style}>
           <Typography id="modal-modal-title" variant="h4" component="h2" style={{display:'flex', justifyContent:'center', alignItems:'center'}}>
-            TO DO CHARTS
+            CHARTS
           </Typography>
           <Typography id="modal-modal-description" sx={{ mt: 2 }}>
+            {Object.keys(props.barData).length>0 ?
+              <Bar 
+              data={{
+                labels: Object.keys(props.barData), 
+                datasets:[
+                  {
+                    //label:"Revenue",
+                    data: Object.values(props.barData) ,
+                    backgroundColor: ['#0088FE', '#00C49F', '#42FFCB',"#FF7C15"],
+                    borderColor: ['#0088FE', '#00C49F', '#42FFCB', "#FF7C15"],
+                    borderWidth: 2,
+                    borderRadius:5
+                  },
+                ],
+              }}
+              options={{
+                plugins:{
+                  tooltip:{
+                    enabled:true,
+                  }
+                },
+                scales:{
+                  y:{
+                    ticks:{
+                      stepSize:1
+                    }
+                  }
+                }
+              }}
+            />
+              
+            :
             <Bar 
               data={{
-                labels:props.chartData.labels, 
+                labels: props.chartData.labels, 
                 datasets:[
                   {
                     //label:"Revenue",
@@ -84,6 +117,8 @@ export function ModalChartsWindow(props: IModalDataSend) {
                 }
               }}
             />
+            }
+            <br />
             <Doughnut 
                data={{
                 labels:props.chartData.labels, 
