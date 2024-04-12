@@ -11,6 +11,7 @@ import { ChartsCreator } from "../bim-components/charts";
 import PieChartWithLabel from "./charts/PieChartWithLabel";
 import { ModalChartsWindow } from "./ModawWindow/ModalChartsWindow";
 import agent from "../api/agent";
+import { Helper } from "../helpers/HelperMethods";
 
 export interface IChartData{
     labels:string[],
@@ -22,12 +23,12 @@ export function IFCViewer(){
     let {fileName} = useParams();
     if(fileName === undefined) return navigate("/");
     //const [ifcLoad, setIfcLoad] = React.useState<null | OBC.FragmentIfcLoader>(null)
-    const [fragMana, setFragMana] = React.useState<null | OBC.FragmentManager>(null);
+    //const [fragMana, setFragMana] = React.useState<null | OBC.FragmentManager>(null);
     //const {model, setModel} = React.useContext(ViewerContext);
     //const [listToDoData, setListToDoData] = React.useState<ToDoData[]>([]);
     const [openModalCharts, setOpenModalCharts] = React.useState<boolean>(false);
     const [chartData, setChartData] = React.useState<IChartData>({labels:[], data:[]});
-    const [loadedModelToDos, setLoadedModelToDos] = React.useState([]);
+    //const [loadedModelToDos, setLoadedModelToDos] = React.useState([]);
     var modelElementSelected : any[] = [];
     console.log("useParams fileName: ", fileName);
     let viewer : OBC.Components;
@@ -64,7 +65,7 @@ export function IFCViewer(){
         spinner.active = true;
         spinner.visible = true;
         const fragmentManager = new OBC.FragmentManager(viewer);
-        setFragMana(fragmentManager);
+        //setFragMana(fragmentManager);
 
         const ifcLoader = new OBC.FragmentIfcLoader(viewer);
         ifcLoader.settings.wasm = {
@@ -92,7 +93,29 @@ export function IFCViewer(){
 
         }
 
-        loadFile(fileName+".ifc");
+        const loadFragFile = async (fileName : string)=>{
+            const file = await fetch(`./${fileName}`);
+            const arrayBuffer = await file.arrayBuffer();
+            const uintArray = new Uint8Array(arrayBuffer);
+            await fragmentManager.load(uintArray);
+            spinner.active = false;
+            spinner.visible = false;
+        }
+
+        const loadFragModelProperites = async (model : FragmentsGroup)=>{
+            await fetch(`./${fileName}.txt`)
+                .then(response=> response.text())
+                .then(textRes=> {model.properties = JSON.parse(textRes)});
+
+        }
+
+        fragmentManager.onFragmentsLoaded.add(async (model : FragmentsGroup)=>{
+            await loadFragModelProperites(model);
+            onModelLoaded(model);
+        })
+
+        //loadFile(fileName+".ifc");
+        loadFragFile(fileName+".frag");
         var colorGrid = new THREE.Color("rgb(129, 133, 137)");
         const grid = new OBC.SimpleGrid(viewer, colorGrid);
 
@@ -102,20 +125,25 @@ export function IFCViewer(){
         const getStorageToDoInDatabase = async ()=>{
             //console.log("loaded model: ", loadedModelToDos);
             var data = await getAllToDo();
-            console.log("storagedataToDo: ", data);
+            console.log("getAllToDo function: ", data);
+            for(var i =0; i<data.length; i++){
+                var toDo = data[i];
+                console.log("single toDo: ", toDo);
+                var createdToDoDataFromDb = Helper.CreateToDoDataObjectFromDbInfo(toDo);
+                toDoData.push(createdToDoDataFromDb);
+            }
             
+           console.log("allList of pushed toDo: ", toDoData);
             for(var storageToDo of data){
+                
                 var card = new ToDoCard(viewer, storageToDo.id);
                 toDoCardComponentList.push(card);
                 card.date = new Date(storageToDo.date);
                 card.description = storageToDo.description;
                 card.status = storageToDo.status;
-                console.log("creating id of toDo: ", card.getIdNumberOfToDo());
                 const idOfToDoElementComponent = card.getIdNumberOfToDo() as number;
                 const lookData = JSON.parse(storageToDo.camera);
                 const fragmentMapWithArray = JSON.parse(storageToDo.fragmentMap);
-                console.log("Db data lookData: ", lookData);
-                console.log("Db data fragmentMap: ", fragmentMapWithArray);
                 var fragmentMapWithSet:any = {};
                 for(var fragmentMapIdKey of Object.keys(fragmentMapWithArray)){
                     var valueArray = fragmentMapWithArray[fragmentMapIdKey];
@@ -124,32 +152,28 @@ export function IFCViewer(){
                         newSet.add(expressId);
                     }
                     fragmentMapWithSet[fragmentMapIdKey] = newSet;
-                    console.log("fragmentMapWithSet: ", fragmentMapWithSet);
                 }
 
                 card.onCardClick.add(()=>{
                     var cameraComponent = viewer.camera;
                     if(!(cameraComponent instanceof OBC.OrthoPerspectiveCamera)) return;
                     if(fragmentMapWithSet.length==0) return;
-                    cameraComponent.controls.setLookAt(lookData.position.x,lookData.position.y, lookData.position.z, lookData.target.x, lookData.target.y, lookData.target.z);
-                    highlighter.highlightByID("select",fragmentMapWithSet);
+                    cameraComponent.controls.setLookAt(lookData.position.x,lookData.position.y, lookData.position.z, lookData.target.x, lookData.target.y, lookData.target.z,true);
+                    console.log("fragmentMap to select: ", fragmentMapWithSet);
+                    var toDoSelected = toDoData.filter(x=>JSON.stringify(x.camera)==JSON.stringify(lookData));
+                    //highlighter.highlightByID("select",fragmentMapWithSet);
+                    highlighter.highlightByID("select",toDoSelected[0].fragmentMap);
                 })
 
                 card.onDeleteBtnClick.add(async (idNumberOfToDo)=>{
-                    console.log("clicked delete");
-                    console.log("id of delete element: ", idNumberOfToDo);
-                    console.log("storageToDo inside buttn clicked: ", storageToDo);
-                    
                     var allToDoInCard = todo.uiElement.get("floatingWindow").children;
                     for(var toDoCardUIComponent of allToDoInCard){
                         var toDoComponentData = toDoCardUIComponent.get();
-                        console.log("All ui in floating window: ", toDoComponentData)
                         
                     }
                     
                     var idOfToDoToDelete = (card.getIdNumberOfToDo()) as number;
                     var cardToDelete = toDoCardComponentList.find(x=>x.getIdNumberOfToDo()==idNumberOfToDo);
-                    console.log("cardToDelete in new way: ", cardToDelete);
                     if(idNumberOfToDo ==0 || !cardToDelete) return;
                     await agent.toDo.deleteToDo( idNumberOfToDo).catch(e=>console.warn(e));
                     todo.uiElement.get("floatingWindow").removeChild(cardToDelete);
@@ -161,10 +185,8 @@ export function IFCViewer(){
             }
         }
 
-        ifcLoader.onIfcLoaded.add(async (model)=>{
-            //console.log("model: ", model);
-            //setLoadedModel(model);
-            //setModel(model);
+       
+        const onModelLoaded = async (model : FragmentsGroup)=>{
             highlighter.update();
             propertiesProcessor.process(model);
 
@@ -184,13 +206,14 @@ export function IFCViewer(){
                             modelElementSelected.push(elementModel);
                         })
                     }
+                }else{
+                    console.warn("Model does not have properties");
                 }
             })
 
             await getStorageToDoInDatabase();
 
             const dataToDoToSend = async (data : ToDoData,convertedFragmentMap: any ,target: THREE.Vector3, position: THREE.Vector3, arrayOfGlobalId: string[])=>{
-                console.log("data in function: ", data);
                 var dataToSend = {
                     date: data.date, 
                     description: data.description,
@@ -200,7 +223,6 @@ export function IFCViewer(){
                     globalId: arrayOfGlobalId,
                     fileName: fileName == undefined ? "" : fileName,
                 }
-                console.log("converted data: ", dataToSend);
                 await agent.toDo.addToDo(dataToSend).catch(e=>console.warn(e));
             }
 
@@ -242,12 +264,8 @@ export function IFCViewer(){
                     globalId: arrayOfGlobalId,
                     fileName: fileName == undefined ? "" : fileName,
                 };
-                console.log("before sending to function: ", dataToAdd);
                 await dataToDoToSend(dataToAdd,convertedFragmentMapWithArray,target,position,arrayOfGlobalId);
-                //await agent.toDo.addToDo(dataToAdd);
-                //setListToDoData((data)=>[...data, dataToAdd]);
                 toDoData.push(dataToAdd);
-                //console.log("ready data: ",dataToAdd);
                 var card = new ToDoCard(viewer);
                 card.description = description;
                 card.date = dataToAdd.date;
@@ -279,6 +297,11 @@ export function IFCViewer(){
 
             spinner.visible = false;
             spinner.active = false;
+        }
+
+
+        ifcLoader.onIfcLoaded.add(async (model)=>{
+           onModelLoaded(model);
         })
 
        
@@ -377,9 +400,7 @@ export function IFCViewer(){
     }
 
     const getAllToDo = async ()=>{
-        console.log("before if getAllToDo");
         if(fileName) {
-            console.log("inside if getAllToDo");
            var dataToDos = await agent.toDo.allToDos(fileName);
            return dataToDos;
            //console.log("dataToDos: ", dataToDos);
@@ -398,8 +419,8 @@ export function IFCViewer(){
           //setIfcLoad(null);
           //loadedModel?.dispose();
           //setLoadedModel(null);
-          fragMana?.dispose();
-          setFragMana(null);
+          //fragMana?.dispose();
+          //setFragMana(null);
           //setListToDoData([]);
           
         }
