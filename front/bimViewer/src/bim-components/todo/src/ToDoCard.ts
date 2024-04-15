@@ -47,7 +47,7 @@ export class ToDoCard extends OBC.SimpleUIComponent{
         
         const template = `
         <div class="todo-item" style="display:flex; justify-content: space-between; align-items: center" id=${id}>
-            <div style="display: flex; justify-content: space-between; align-items: center; column-gap:1rem">
+            <div style="display: flex; justify-content: space-between; align-items: center; column-gap:1rem; width:100%">
                 <div style="display: flex; column-gap: 15px; align-items: center;">
                     <span class="material-icons-outlined">
                         handyman

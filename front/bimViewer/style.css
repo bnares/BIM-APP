@@ -265,11 +265,40 @@ input:focus, textarea:focus, select:focus {
   outline: none;
 }
 
+
+/* .flex .justify-between{
+  flex-direction: column !important;
+  color: red !important;
+} */
+
+/* .ifcjs-dimension-label {
+  background-color: black !important;
+  font-family: sans-serif !important;
+  color: white !important;
+  padding: 8px !important;
+  border-radius: 8px !important;
+  pointer-events: all !important;
+  transition: background-color 200ms ease-in-out !important;
+  }
+  .ifcjs-dimension-label:hover {
+  background-color: grey !important;
+  }
+  .ifcjs-dimension-preview {
+  background-color: #ffffff !important;
+  width: 2rem !important;
+  height: 2rem !important;
+  opacity: 0.3 !important;
+  padding: 8px !important;
+  border-radius: 100% !important;
+  } */
+
 .todo-item {
   padding: 20px;
   outline: 2px solid var(--background-200);
   border-radius: 10px;
   cursor: pointer;
+  display: flex !important;
+  justify-content: space-between !important;
 }
 
 .todo-item:hover {

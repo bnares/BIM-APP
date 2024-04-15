@@ -72,6 +72,16 @@ export class ToDoCreator extends OBC.Component<ToDoData[]> implements OBC.UI, OB
         })
 
         const taskForm = new OBC.Modal(this._components, "Add Task");
+        
+        
+        taskForm.innerElements.description.style.width = "100%"
+        taskForm.innerElements.description.style.display = "flex"
+        taskForm.innerElements.description.style.flexDirection="column";
+        taskForm.innerElements.description.style.justifyContent="center";
+        taskForm.innerElements.description.style.alignItems="center";
+        taskForm.innerElements.description.style.color="red";
+        
+        
         taskForm.visible = false;
         taskForm.slots.content.get().style.padding="20px";
         taskForm.slots.content.get().style.display="flex";
@@ -79,6 +89,8 @@ export class ToDoCreator extends OBC.Component<ToDoData[]> implements OBC.UI, OB
         taskForm.slots.content.get().style.justifyContent="center";
         taskForm.slots.content.get().style.rowGap="20px";
         this._components.ui.add(taskForm);
+
+        
 
         var dropDown = new OBC.Dropdown(this._components)
         dropDown.addOption("Pending", "Active", "Finished");
@@ -93,10 +105,27 @@ export class ToDoCreator extends OBC.Component<ToDoData[]> implements OBC.UI, OB
         
 
         taskForm.onCancel.add(()=>{
+            console.log("Count of elements: ", taskForm.innerElements.description.children.length);
+            try{
+                var node = taskForm.innerElements.description.lastChild as Node;
+                taskForm.innerElements.description.removeChild(node);
+            }catch(e){
+                
+            }
             taskForm.visible = false;
+            //taskForm.innerElements.description.removeChild(errorMsg);
+            
         })
 
-        taskForm.onAccept.add(()=>{
+        taskForm.onAccept.add(async ()=>{
+            const highlighter = await this._components.tools.get(OBC.FragmentHighlighter);
+            const selectedElem = highlighter.selection.select;
+            if(Object.keys(selectedElem).length==0){
+                var errorMsg = ((`Select model element with mouse before`) as unknown) as HTMLParagraphElement;
+                taskForm.innerElements.description.append(errorMsg);
+                return;
+            }
+            
             if(!dropDown.value) return;
             this.onToDoFormAccepted.trigger({status:dropDown.value as ToDoStatus, description: inputText.value});
             //this.addToDo(dropDown.value as ToDoStatus, inputText.value);

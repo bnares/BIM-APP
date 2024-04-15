@@ -12,6 +12,8 @@ import PieChartWithLabel from "./charts/PieChartWithLabel";
 import { ModalChartsWindow } from "./ModawWindow/ModalChartsWindow";
 import agent from "../api/agent";
 import { Helper } from "../helpers/HelperMethods";
+import "../../../../front/bimViewer/style.css"
+import { render } from "react-dom";
 
 export interface IChartData{
     labels:string[],
@@ -160,12 +162,90 @@ export function IFCViewer(){
                 todo.uiElement.get("floatingWindow").addChild(card);
             }
         }
+
+        var classifier = new OBC.FragmentClassifier(viewer);
+        const classifications = classifier.get();
+
+
+        const culler = new OBC.ScreenCuller(viewer);
+        cameraComponent.controls.addEventListener("sleep",()=>{
+            culler.needsUpdate = true;
+        })
+        viewerContainer.addEventListener("mouseup",()=>culler.needsUpdate=true);
+        viewerContainer.addEventListener("wheel", ()=>culler.needsUpdate = true);
+
+        const classifierWindow = new OBC.FloatingWindow(viewer);
+        classifierWindow.visible = false;
+        viewer.ui.add(classifierWindow);
+        classifierWindow.title = "Model Group";
+        var classifierBtn = new OBC.Button(viewer);
+        classifierBtn.tooltip = "Model Group";
+        classifierBtn.materialIcon="account_tree";
+        classifierBtn.onClick.add(()=>{
+            classifierWindow.visible = !classifierWindow.visible;
+        })
+
+        const hider = new OBC.FragmentHider(viewer);
+
+        const createModelTree = async ()=>{
+            const fragmentTree = new OBC.FragmentTree(viewer);
+            await fragmentTree.init();
+            fragmentTree.update([]);
+            await fragmentTree.update(["model","storeys","entities"]);
+            const tree = fragmentTree.get().uiElement.get("tree");
+            await classifierWindow.slots.content.dispose(true);
+            fragmentTree.onHovered.add((fragmentMap)=>{
+                highlighter.highlightByID("hover",fragmentMap);
+            });
+            fragmentTree.onSelected.add((fragmentMap)=>{
+                highlighter.highlightByID("select", fragmentMap);
+            })
+            return tree;
+        }
+
+        const asignElementCategoryToStyleMaterial = async (model : FragmentsGroup)=>{
+            const found = await classifier.find({entities:["IFCWALL", "IFCBEAM", "IFCCOLUMN","IFCSLAB"]});
+            console.log("found: ", found);
+            for(const fragID in found){
+                const {mesh} = fragmentManager.list[fragID];
+                newStyleFilled.fragments[fragID] = new Set(found[fragID]);
+                newStyleFilled.meshes.add(mesh);
+            }
+
+            const meshes = [];
+            for(const fragment of model.items){
+                const {mesh} = fragment;
+                meshes.push(mesh);
+                newStyleProjected.meshes.add(mesh);
+            }
+            materialManager.addMeshes("white", meshes);
+
+        }
        
         const onModelLoaded = async (model : FragmentsGroup)=>{
+           
+            console.log(model);
+            console.log(fragmentManager);
+            //scene2d.add(model);
+            //scene2d.add()
             var chartBarData = charts.countNumberOfElementsTypeInModel(model.properties);
             setBarChartData(chartBarData);
             highlighter.update();
             propertiesProcessor.process(model);
+            classifier.byModel(model.ifcMetadata.name, model);
+            classifier.byStorey(model);
+            classifier.byEntity(model);
+            const tree = await createModelTree();
+            classifierWindow.addChild(tree);
+            for(const fragment of model.items){
+                culler.add(fragment.mesh);
+            }
+
+            
+            await asignElementCategoryToStyleMaterial(model);
+            await floorPLans.computeAllPlanViews(model);
+            await floorPLans.updatePlansList()
+            culler.needsUpdate = true;
 
             highlighter.events.select.onClear.add(()=>{
                 modelElementSelected = [];
@@ -266,6 +346,8 @@ export function IFCViewer(){
                 })
                 todo.uiElement.get("floatingWindow").addChild(card);
             })
+
+           
             spinner.visible = false;
             spinner.active = false;
         }
@@ -353,16 +435,155 @@ export function IFCViewer(){
             const renderer = rendererComponent.get();
             rendererComponent.postproduction.composer.render(); //forcing program to make render
             const image = renderer.domElement.toDataURL("image/jpeg"); //it gives an image of what you see in the screen
-
         })
+
+        const dimensions = new OBC.LengthMeasurement(viewer);
+        dimensions.color = new THREE.Color("red");
+        dimensions.snapDistance =1;
+        
+        const areaMeasure = new OBC.AreaMeasurement(viewer);
+        
+        areaMeasure.uiElement.get("main").get().addEventListener("click",(event)=>{
+            areaMeasure.create();
+        })
+
+        const clipper = new OBC.EdgesClipper(viewer);
+        clipper.enabled = true;
+        clipper.uiElement.get("main").active = false;
+        const blueFill = new THREE.MeshBasicMaterial({color: 'lightblue', side: 2});
+        const blueLine = new THREE.LineBasicMaterial({ color: 'blue' });
+        const blueOutline = new THREE.MeshBasicMaterial({color: 'blue', opacity: 0.2, side: 2, transparent: true});
+        clipper.styles.create("Red lines", new Set(fragmentManager.meshes), blueLine, blueFill, blueOutline);
+
+        window.onkeydown = (event)=>{
+            if(event.code ==="Delete" || event.code==="Backspace" || event.code ==="Escape"){
+                clipper.deleteAll();
+                dimensions.deleteAll();
+                areaMeasure.deleteAll();
+            }
+        }
+
+        viewerContainer.ondblclick = ()=>{
+            clipper.create();
+        }
+
+        //floor plans part
+        const sectionMaterial = new THREE.LineBasicMaterial({color:'black'});
+        const filleMaterial = new THREE.MeshBasicMaterial({color:'gray', side:2});
+        const fillOutline = new THREE.MeshBasicMaterial({color:'black', side:1, opacity:0.5, transparent:true});
+        const newStyleFilled = clipper.styles.create("filled", new Set(), sectionMaterial, filleMaterial, fillOutline);
+        const newStyleProjected = clipper.styles.create("projected", new Set(), sectionMaterial);
+        const styles = clipper.styles.get();
+        
+        const whiteColor = new THREE.Color("white");
+        const whiteMaterial = new THREE.MeshBasicMaterial({color:whiteColor});
+        const materialManager = new OBC.MaterialManager(viewer);
+        materialManager.addMaterial("white", whiteMaterial);
+
+        const floorPLans = new OBC.FragmentPlans(viewer);
+
+        const highlighterMaterial = new THREE.MeshBasicMaterial({
+            color:'#BCF124',
+            depthTest:false,
+            opacity:0.8,
+            transparent:true,
+        });;
+        highlighter.add("redSelection", [highlighterMaterial]);
+        highlighter.outlineMaterial.color.set(0xf0ff7a);
+        let lastSelection;
+        let singleSelection = {
+            value: true,
+        }
+        const canvas = rendererComponent.get().domElement;
+        canvas.addEventListener("click", ()=>{
+            highlighter.clear("redSelection");
+        })
+        highlighter.update();
+        floorPLans.commands={
+            "Select": async (plan)=>{
+                if(plan){
+                    console.log("Selected plan: ",plan);
+                    const found = await classifier.find({storeys:[plan.name]});
+                    console.log("FloorPlan select found: ",found);
+                    highlighter.highlightByID("redSelection", found);
+                    const floorsNamesToHide = Object.keys(classifier.get()['storeys']).filter(x=>x!=plan.name);
+                    console.log("classifier.get() in select: ", classifier.get());
+                    for(var floorName of floorsNamesToHide){
+                        const foundFloor = await classifier.find({storeys:[floorName]});
+                        hider.set(false, foundFloor);
+                    }
+                }
+            },
+            "Show":async (plan)=>{
+                if(plan){
+                    const found = await classifier.find({storeys:[plan.name]});
+                    console.log("FloorPlan SHOW found: ",found);
+                    hider.set(true, found);
+                    const floorsNamesToShow = Object.keys(classifier.get()["storeys"]);
+                    console.log("classifier.get() in show: ", classifier.get());
+                    for(var floorName of floorsNamesToShow){
+                        const foundFloor = await classifier.find({storeys:[floorName]});
+                        hider.set(true, foundFloor);
+                    }
+                }
+            },
+            "Hide": async (plan)=>{
+                if(plan){
+                    const found = await classifier.find({storeys:[plan.name]});
+                    console.log("FloorPlan Hide found: ",found);
+                    hider.set(false, found);
+                }
+            }
+        }
+
+        const prepareFragmentMapToHideOrShowNotCurrentFloors = async ( showOrHide: boolean, currentFloorPLan: string)=>{
+            var floorsNameList = Object.keys(classifier.get()["storeys"]);
+            var floorsNameToHide = [];
+            for(var floor of floorsNameList){
+              //console.log("floor: ", flor);
+              if(floor != currentFloorPLan) floorsNameToHide.push(floor)
+            }
+            console.log("Floors to hide: ", floorsNameToHide);
+            for(var floorToHide of floorsNameToHide){
+              const found = await classifier.find({storeys:[floorToHide]})
+              console.log("data floors to hide: ",found);
+              hider.set(showOrHide, found);
+            }
+        }
+
+        floorPLans.onNavigated.add(()=>{
+            rendererComponent.postproduction.customEffects.glossEnabled = false;
+            materialManager.setBackgroundColor(whiteColor);
+            materialManager.set(true,["white"]);
+            grid.visible = false;
+        })
+
+        floorPLans.onExited.add(async ()=>{
+            await prepareFragmentMapToHideOrShowNotCurrentFloors(true, "");
+            rendererComponent.postproduction.customEffects.glossEnabled = true;
+            materialManager.resetBackgroundColor();
+            materialManager.set(false,["white"]);
+            grid.visible = true;
+        })
+
+        const exploder = new OBC.FragmentExploder(viewer);
+
+        
 
         const toolbar = new OBC.Toolbar(viewer);
         toolbar.addChild(
             //ifcLoader.uiElement.get("main"),
+            classifierBtn,
             propertiesProcessor.uiElement.get("main"),
             todo.uiElement.get("activationButton"),
             charts.uiElement.get("activationButton"),
             aiRendererBtn,
+            exploder.uiElement.get("main"),
+            hider.uiElement.get("main"),
+            //clipper.uiElement.get("main"),
+            dimensions.uiElement.get("main"),
+            areaMeasure.uiElement.get("main"),
+            floorPLans.uiElement.get("main"),
         )
         viewer.ui.addToolbar(toolbar);
        
